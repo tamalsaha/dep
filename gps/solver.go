@@ -474,12 +474,20 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 			k++
 		}
 	}*/
+	var soln solution
 	deps, err := s.intersectConstraintsWithImports(s.rd.combineConstraints(), s.rd.externalImportList(s.stdLibFn))
 	soln.p = make([]LockedProject, len(deps))
 	soln.analyzerInfo = s.rd.an.Info()
 	for key, val := range deps {
-		fmt.Println("hello key, value", key, val.Constraint.String())
-		soln.p[key].pi = val.Ident
+		fmt.Println("hello key, value****************************", val.Constraint, reflect.TypeOf(val.Constraint))
+		atom := atom{
+			id:val.Ident,
+			v: NewVersion(val.Constraint.String()),
+		}
+		str := make(map[string]struct{})
+		str[string(val.Ident.ProjectRoot)] = struct{}{}
+		tmp := pa2lp(atom, str)
+		soln.p[key] = tmp
 		// soln.p[key].v = val.Constraint.
 		// tc, err := s.sel.getConstraint(val.Ident).(Revision)
 		bmi := bimodalIdentifier{
@@ -497,7 +505,8 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 			soln.p[key].v = v.v
 			soln.p[key].r = v.r
 		default:
-			panic("unreachable")
+			soln.p[key].v = NewVersion(val.Constraint.String())
+			// panic("unreachable")
 		}
 	}
 
