@@ -18,6 +18,7 @@ import (
 	"github.com/golang/dep/gps/paths"
 	"github.com/golang/dep/gps/pkgtree"
 	"github.com/pkg/errors"
+	"reflect"
 )
 
 var rootRev = Revision("")
@@ -457,7 +458,7 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 	// all, err := s.solve(ctx)
 
 	// s.mtr.pop()
-	var soln solution
+	// var soln solution
 	/*if err == nil {
 		soln = solution{
 			att:  s.attempts,
@@ -479,7 +480,6 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 	soln.p = make([]LockedProject, len(deps))
 	soln.analyzerInfo = s.rd.an.Info()
 	for key, val := range deps {
-		fmt.Println("hello key, value****************************", val.Constraint, reflect.TypeOf(val.Constraint))
 		atom := atom{
 			id:val.Ident,
 			v: NewVersion(val.Constraint.String()),
@@ -488,13 +488,13 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 		str[string(val.Ident.ProjectRoot)] = struct{}{}
 		tmp := pa2lp(atom, str)
 		soln.p[key] = tmp
-		// soln.p[key].v = val.Constraint.
-		// tc, err := s.sel.getConstraint(val.Ident).(Revision)
 		bmi := bimodalIdentifier{
 			id:val.Ident,
 		}
 		q, err := s.createVersionQueue(bmi)
-		fmt.Println("hello Rivision-----", q, err)
+		if err != nil {
+			panic(fmt.Sprintf("%v", err))
+		}
 		// soln.p[key].v = q.current().(type)
 		switch v := q.current().(type) {
 		case UnpairedVersion:
@@ -505,8 +505,8 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 			soln.p[key].v = v.v
 			soln.p[key].r = v.r
 		default:
-			soln.p[key].v = NewVersion(val.Constraint.String())
-			// panic("unreachable")
+			soln.p[key].v = NewVersion("master")
+			panic("unreachable")
 		}
 	}
 
@@ -946,7 +946,7 @@ func (s *solver) createVersionQueue(bmi bimodalIdentifier) (*versionQueue, error
 
 	// Having assembled the queue, search it for a valid version.
 	s.traceCheckQueue(q, bmi, false, 1)
-	return q, s.findValidVersion(q, bmi.pl)
+	return q, nil
 }
 
 // findValidVersion walks through a versionQueue until it finds a version that
