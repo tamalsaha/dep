@@ -711,7 +711,7 @@ func (s *solver) solveForNongo(ctx context.Context) (map[atom]map[string]struct{
 				pl: bmi.pl,
 			}
 			fmt.Println("before createVersionQueue......XXXXXXXXXXXXX", awp)
-			err = s.selectAtom(awp, false)
+			err = s.selectAtomForNongo(awp, false)
 			s.mtr.pop()
 			if err != nil {
 				// Only a released SourceManager should be able to cause this.
@@ -938,7 +938,7 @@ func (s *solver) getImportsAndConstraintsOfForNongo(a atomWithPackages) ([]strin
 	var pl []string
 	// If lens are the same, then the map must have the same contents as the
 	// slice; no need to build a new one.
-	if len(inmap) == len(a.pl) {
+	/*if len(inmap) == len(a.pl) {
 		pl = a.pl
 	} else {
 		pl = make([]string, 0, len(inmap))
@@ -946,7 +946,7 @@ func (s *solver) getImportsAndConstraintsOfForNongo(a atomWithPackages) ([]strin
 			pl = append(pl, pkg)
 		}
 		sort.Strings(pl)
-	}
+	}*/
 
 	// Add to the list those packages that are reached by the packages
 	// explicitly listed in the atom
@@ -1605,7 +1605,7 @@ func (s *solver) selectAtomForNongo(a atomWithPackages, pkgonly bool) error {
 		pl: a.pl,
 	})
 
-	pl, deps, err := s.getImportsAndConstraintsOf(a)
+	pl, deps, err := s.getImportsAndConstraintsOfForNongo(a)
 	fmt.Println("hello get all project constraints--------", pl, deps, err)
 	if err != nil {
 		if contextCanceledOrSMReleased(err) {
