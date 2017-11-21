@@ -674,7 +674,6 @@ func (s *solver) solveForNongo(ctx context.Context) (map[atom]map[string]struct{
 				},
 				pl: bmi.pl,
 			}
-			fmt.Println("before createVersionQueue......XXXXXXXXXXXXX", awp)
 			err = s.selectAtomForNongo(awp, false)
 			s.mtr.pop()
 			if err != nil {
@@ -1511,7 +1510,6 @@ func (s *solver) selectAtom(a atomWithPackages, pkgonly bool) error {
 }
 
 func (s *solver) selectAtomForNongo(a atomWithPackages, pkgonly bool) error {
-	fmt.Println("hello selectAtom Function&&&&&&&&&&&&", a)
 	s.mtr.push("select-atom")
 	s.unsel.remove(bimodalIdentifier{
 		id: a.a.id,
@@ -1519,7 +1517,6 @@ func (s *solver) selectAtomForNongo(a atomWithPackages, pkgonly bool) error {
 	})
 
 	pl, deps, err := s.getImportsAndConstraintsOfForNongo(a)
-	fmt.Println("hello get all project constraints--------", pl, deps, err)
 	if err != nil {
 		if contextCanceledOrSMReleased(err) {
 			return err
@@ -1541,7 +1538,6 @@ func (s *solver) selectAtomForNongo(a atomWithPackages, pkgonly bool) error {
 	// network activity...maybe? if so, can we mitigate by deferring the work to
 	// queue consumption time?
 	_, l, _ := s.b.GetManifestAndLock(a.a.id, a.a.v, s.rd.an)
-	fmt.Println("hello lock files----------", l)
 	var lmap map[ProjectIdentifier]Version
 	if l != nil {
 		lmap = make(map[ProjectIdentifier]Version)
