@@ -18,7 +18,6 @@ import (
 	"github.com/golang/dep/gps/paths"
 	"github.com/golang/dep/gps/pkgtree"
 	"github.com/pkg/errors"
-	"reflect"
 )
 
 var rootRev = Revision("")
