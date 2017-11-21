@@ -455,7 +455,7 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 	}
 
 	all, err := s.solveForNongo(ctx)
-	fmt.Println("Hello all Length:", len(all))
+
 	s.mtr.pop()
 	var soln solution
 	if err == nil {
@@ -470,45 +470,10 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 		soln.p = make([]LockedProject, len(all))
 		k := 0
 		for pa, pl := range all {
-			fmt.Println("hello packages-----", pl)
 			soln.p[k] = pa2lp(pa, pl)
 			k++
 		}
 	}
-	/*var soln solution
-	deps, err := s.intersectConstraintsWithImports(s.rd.combineConstraints(), s.rd.externalImportList(s.stdLibFn))
-	soln.p = make([]LockedProject, len(deps))
-	soln.analyzerInfo = s.rd.an.Info()
-	for key, val := range deps {
-		atom := atom{
-			id:val.Ident,
-			v: NewVersion(val.Constraint.String()),
-		}
-		str := make(map[string]struct{})
-		str[string(val.Ident.ProjectRoot)] = struct{}{}
-		tmp := pa2lp(atom, str)
-		soln.p[key] = tmp
-		bmi := bimodalIdentifier{
-			id:val.Ident,
-		}
-		q, err := s.createVersionQueue(bmi)
-		if err != nil {
-			panic(fmt.Sprintf("%v", err))
-		}
-		// soln.p[key].v = q.current().(type)
-		switch v := q.current().(type) {
-		case UnpairedVersion:
-			soln.p[key].v = v
-		case Revision:
-			soln.p[key].r = v
-		case versionPair:
-			soln.p[key].v = v.v
-			soln.p[key].r = v.r
-		default:
-			soln.p[key].v = NewVersion("master")
-			panic("unreachable")
-		}
-	}*/
 
 	s.traceFinish(soln, err)
 	if s.tl != nil {
@@ -773,7 +738,6 @@ func (s *solver) solveForNongo(ctx context.Context) (map[atom]map[string]struct{
 
 	// Skip the first project. It's always the root, and that shouldn't be
 	// included in results.
-	fmt.Println("hello all projects----- length", len(s.sel.projects))
 	for _, sel := range s.sel.projects[1:] {
 		pm, exists := projs[sel.a.a]
 		if !exists {
@@ -918,60 +882,10 @@ func (s *solver) getImportsAndConstraintsOfForNongo(a atomWithPackages) ([]strin
 		return nil, nil, err
 	}
 
-	/*ptree, err := s.b.ListPackages(a.a.id, a.a.v)
-	if err != nil {
-		return nil, nil, err
-	}*/
-
-	// rm, em := ptree.ToReachMap(true, false, true, s.rd.ir)
-	// Use maps to dedupe the unique internal and external packages.
-	// exmap, inmap := make(map[string]struct{}), make(map[string]struct{})
-
-	/*for _, pkg := range a.pl {
-		inmap[pkg] = struct{}{}
-		for _, ipkg := range rm[pkg].Internal {
-			inmap[ipkg] = struct{}{}
-		}
-	}*/
-
 	var pl []string
-	// If lens are the same, then the map must have the same contents as the
-	// slice; no need to build a new one.
-	/*if len(inmap) == len(a.pl) {
-		pl = a.pl
-	} else {
-		pl = make([]string, 0, len(inmap))
-		for pkg := range inmap {
-			pl = append(pl, pkg)
-		}
-		sort.Strings(pl)
-	}*/
 
 	// Add to the list those packages that are reached by the packages
 	// explicitly listed in the atom
-	/*for _, pkg := range a.pl {
-		// Skip ignored packages
-		if s.rd.ir.IsIgnored(pkg) {
-			continue
-		}
-
-		ie, exists := rm[pkg]
-		if !exists {
-			// Missing package here *should* only happen if the target pkg was
-			// poisoned; check the errors map.
-			if importErr, eexists := em[pkg]; eexists {
-				return nil, nil, importErr
-			}
-
-			// Nope, it's actually full-on not there.
-			return nil, nil, fmt.Errorf("package %s does not exist within project %s", pkg, a.a.id)
-		}
-
-		for _, ex := range ie.External {
-			exmap[ex] = struct{}{}
-		}
-	}*/
-
 	reach := make([]string, 0)
 
 	deps := s.rd.ovr.overrideAll(m.DependencyConstraints())
