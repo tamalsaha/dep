@@ -905,6 +905,85 @@ func (s *solver) getImportsAndConstraintsOf(a atomWithPackages) ([]string, []com
 	return pl, cd, err
 }
 
+func (s *solver) getImportsAndConstraintsOfForNongo(a atomWithPackages) ([]string, []completeDep, error) {
+	var err error
+
+	if s.rd.isRoot(a.a.id.ProjectRoot) {
+		panic("Should never need to recheck imports/constraints from root during solve")
+	}
+
+	// Work through the source manager to get project info and static analysis
+	// information.
+	m, _, err := s.b.GetManifestAndLock(a.a.id, a.a.v, s.rd.an)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	/*ptree, err := s.b.ListPackages(a.a.id, a.a.v)
+	if err != nil {
+		return nil, nil, err
+	}*/
+
+	// rm, em := ptree.ToReachMap(true, false, true, s.rd.ir)
+	// Use maps to dedupe the unique internal and external packages.
+	// exmap, inmap := make(map[string]struct{}), make(map[string]struct{})
+
+	/*for _, pkg := range a.pl {
+		inmap[pkg] = struct{}{}
+		for _, ipkg := range rm[pkg].Internal {
+			inmap[ipkg] = struct{}{}
+		}
+	}*/
+
+	var pl []string
+	// If lens are the same, then the map must have the same contents as the
+	// slice; no need to build a new one.
+	if len(inmap) == len(a.pl) {
+		pl = a.pl
+	} else {
+		pl = make([]string, 0, len(inmap))
+		for pkg := range inmap {
+			pl = append(pl, pkg)
+		}
+		sort.Strings(pl)
+	}
+
+	// Add to the list those packages that are reached by the packages
+	// explicitly listed in the atom
+	/*for _, pkg := range a.pl {
+		// Skip ignored packages
+		if s.rd.ir.IsIgnored(pkg) {
+			continue
+		}
+
+		ie, exists := rm[pkg]
+		if !exists {
+			// Missing package here *should* only happen if the target pkg was
+			// poisoned; check the errors map.
+			if importErr, eexists := em[pkg]; eexists {
+				return nil, nil, importErr
+			}
+
+			// Nope, it's actually full-on not there.
+			return nil, nil, fmt.Errorf("package %s does not exist within project %s", pkg, a.a.id)
+		}
+
+		for _, ex := range ie.External {
+			exmap[ex] = struct{}{}
+		}
+	}*/
+
+	reach := make([]string, 0)
+
+	deps := s.rd.ovr.overrideAll(m.DependencyConstraints())
+	for _, val := range deps {
+		reach = append(reach, string(val.Ident.ProjectRoot))
+	}
+	sort.Strings(reach)
+	cd, err := s.intersectConstraintsWithImports(deps, reach)
+	return pl, cd, err
+}
+
 // intersectConstraintsWithImports takes a list of constraints and a list of
 // externally reached packages, and creates a []completeDep that is guaranteed
 // to include all packages named by import reach, using constraints where they
