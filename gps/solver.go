@@ -455,11 +455,11 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 		return nil, err
 	}
 
-	// all, err := s.solve(ctx)
-
-	// s.mtr.pop()
-	// var soln solution
-	/*if err == nil {
+	all, err := s.solveForNongo(ctx)
+	fmt.Println("Hello all Length:", len(all))
+	s.mtr.pop()
+	var soln solution
+	if err == nil {
 		soln = solution{
 			att:  s.attempts,
 			solv: s,
@@ -471,11 +471,12 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 		soln.p = make([]LockedProject, len(all))
 		k := 0
 		for pa, pl := range all {
+			fmt.Println("hello packages-----", pl)
 			soln.p[k] = pa2lp(pa, pl)
 			k++
 		}
-	}*/
-	var soln solution
+	}
+	/*var soln solution
 	deps, err := s.intersectConstraintsWithImports(s.rd.combineConstraints(), s.rd.externalImportList(s.stdLibFn))
 	soln.p = make([]LockedProject, len(deps))
 	soln.analyzerInfo = s.rd.an.Info()
@@ -508,7 +509,7 @@ func (s *solver) Solve(ctx context.Context) (Solution, error) {
 			soln.p[key].v = NewVersion("master")
 			panic("unreachable")
 		}
-	}
+	}*/
 
 	s.traceFinish(soln, err)
 	if s.tl != nil {
@@ -619,6 +620,141 @@ func (s *solver) solve(ctx context.Context) (map[atom]map[string]struct{}, error
 				}
 				return nil, err
 			}
+			err = s.selectAtomForNongo(nawp, true)
+			s.mtr.pop()
+			if err != nil {
+				// Only a released SourceManager should be able to cause this.
+				return nil, err
+			}
+
+			// We don't add anything to the stack of version queues because the
+			// backtracker knows not to pop the vqstack if it backtracks
+			// across a pure-package addition.
+		}
+	}
+
+	// Getting this far means we successfully found a solution. Combine the
+	// selected projects and packages.
+	projs := make(map[atom]map[string]struct{})
+
+	// Skip the first project. It's always the root, and that shouldn't be
+	// included in results.
+	for _, sel := range s.sel.projects[1:] {
+		pm, exists := projs[sel.a.a]
+		if !exists {
+			pm = make(map[string]struct{})
+			projs[sel.a.a] = pm
+		}
+
+		for _, path := range sel.a.pl {
+			pm[path] = struct{}{}
+		}
+	}
+	return projs, nil
+}
+
+func (s *solver) solveForNongo(ctx context.Context) (map[atom]map[string]struct{}, error) {
+	// Pull out the donechan once up front so that we're not potentially
+	// triggering mutex cycling and channel creation on each iteration.
+	donechan := ctx.Done()
+
+	// Main solving loop
+	for {
+		select {
+		case <-donechan:
+			return nil, ctx.Err()
+		default:
+		}
+
+		bmi, has := s.nextUnselected()
+
+		if !has {
+			// no more packages to select - we're done.
+			break
+		}
+
+		// This split is the heart of "bimodal solving": we follow different
+		// satisfiability and selection paths depending on whether we've already
+		// selected the base project/repo that came off the unselected queue.
+		//
+		// (If we've already selected the project, other parts of the algorithm
+		// guarantee the bmi will contain at least one package from this project
+		// that has yet to be selected.)
+		if awp, is := s.sel.selected(bmi.id); !is {
+			s.mtr.push("new-atom")
+			// Analysis path for when we haven't selected the project yet - need
+			// to create a version queue.
+			queue, err := s.createVersionQueue(bmi)
+			if err != nil {
+				s.mtr.pop()
+				// Err means a failure somewhere down the line; try backtracking.
+				s.traceStartBacktrack(bmi, err, false)
+				success, berr := s.backtrack(ctx)
+				if berr != nil {
+					err = berr
+				} else if success {
+					// backtracking succeeded, move to the next unselected id
+					continue
+				}
+				return nil, err
+			}
+
+			if queue.current() == nil {
+				panic("canary - queue is empty, but flow indicates success")
+			}
+
+			awp := atomWithPackages{
+				a: atom{
+					id: queue.id,
+					v:  queue.current(),
+				},
+				pl: bmi.pl,
+			}
+			fmt.Println("before createVersionQueue......XXXXXXXXXXXXX", awp)
+			err = s.selectAtom(awp, false)
+			s.mtr.pop()
+			if err != nil {
+				// Only a released SourceManager should be able to cause this.
+				return nil, err
+			}
+
+			s.vqs = append(s.vqs, queue)
+		} else {
+			s.mtr.push("add-atom")
+			// We're just trying to add packages to an already-selected project.
+			// That means it's not OK to burn through the version queue for that
+			// project as we do when first selecting a project, as doing so
+			// would upend the guarantees on which all previous selections of
+			// the project are based (both the initial one, and any package-only
+			// ones).
+
+			// Because we can only safely operate within the scope of the
+			// single, currently selected version, we can skip looking for the
+			// queue and just use the version given in what came back from
+			// s.sel.selected().
+			nawp := atomWithPackages{
+				a: atom{
+					id: bmi.id,
+					v:  awp.a.v,
+				},
+				pl: bmi.pl,
+			}
+
+			s.traceCheckPkgs(bmi)
+			err := s.check(nawp, true)
+			if err != nil {
+				s.mtr.pop()
+				// Err means a failure somewhere down the line; try backtracking.
+				s.traceStartBacktrack(bmi, err, true)
+				success, berr := s.backtrack(ctx)
+				if berr != nil {
+					err = berr
+				} else if success {
+					// backtracking succeeded, move to the next unselected id
+					continue
+				}
+				return nil, err
+			}
 			err = s.selectAtom(nawp, true)
 			s.mtr.pop()
 			if err != nil {
@@ -638,6 +774,7 @@ func (s *solver) solve(ctx context.Context) (map[atom]map[string]struct{}, error
 
 	// Skip the first project. It's always the root, and that shouldn't be
 	// included in results.
+	fmt.Println("hello all projects----- length", len(s.sel.projects))
 	for _, sel := range s.sel.projects[1:] {
 		pm, exists := projs[sel.a.a]
 		if !exists {
@@ -1310,6 +1447,109 @@ func (s *solver) selectAtom(a atomWithPackages, pkgonly bool) error {
 	// network activity...maybe? if so, can we mitigate by deferring the work to
 	// queue consumption time?
 	_, l, _ := s.b.GetManifestAndLock(a.a.id, a.a.v, s.rd.an)
+	var lmap map[ProjectIdentifier]Version
+	if l != nil {
+		lmap = make(map[ProjectIdentifier]Version)
+		for _, lp := range l.Projects() {
+			lmap[lp.Ident()] = lp.Version()
+		}
+	}
+
+	for _, dep := range deps {
+		// Root can come back up here if there's a project-level cycle.
+		// Satisfiability checks have already ensured invariants are maintained,
+		// so we know we can just skip it here.
+		if s.rd.isRoot(dep.Ident.ProjectRoot) {
+			continue
+		}
+		// If this is dep isn't in the lock, do some prefetching. (If it is, we
+		// might be able to get away with zero network activity for it, so don't
+		// prefetch). This provides an opportunity for some parallelism wins, on
+		// two fronts:
+		//
+		// 1. Because this loop may have multiple deps in it, we could end up
+		// simultaneously fetching both in the background while solving proceeds
+		//
+		// 2. Even if only one dep gets prefetched here, the worst case is that
+		// that same dep comes out of the unselected queue next, and we gain a
+		// few microseconds before blocking later. Best case, the dep doesn't
+		// come up next, but some other dep comes up that wasn't prefetched, and
+		// both fetches proceed in parallel.
+		if s.rd.needVersionsFor(dep.Ident.ProjectRoot) {
+			go s.b.SyncSourceFor(dep.Ident)
+		}
+
+		s.sel.pushDep(dependency{depender: a.a, dep: dep})
+		// Go through all the packages introduced on this dep, selecting only
+		// the ones where the only depper on them is what the preceding line just
+		// pushed in. Then, put those into the unselected queue.
+		rpm := s.sel.getRequiredPackagesIn(dep.Ident)
+		var newp []string
+		for _, pkg := range dep.pl {
+			// Just one means that the dep we're visiting is the sole importer.
+			if rpm[pkg] == 1 {
+				newp = append(newp, pkg)
+			}
+		}
+
+		if len(newp) > 0 {
+			// If there was a previously-established alternate source for this
+			// dependency, but the current atom did not express one (and getting
+			// here means the atom passed the source hot-swapping check - see
+			// checkIdentMatches()), then we have to create the new bmi with the
+			// alternate source. Otherwise, we end up with two discrete project
+			// entries for the project root in the final output, one with the
+			// alternate source, and one without. See #969.
+			id, _ := s.sel.getIdentFor(dep.Ident.ProjectRoot)
+			bmi := bimodalIdentifier{
+				id: id,
+				pl: newp,
+				// This puts in a preferred version if one's in the map, else
+				// drops in the zero value (nil)
+				prefv: lmap[dep.Ident],
+			}
+			heap.Push(s.unsel, bmi)
+		}
+	}
+
+	s.traceSelect(a, pkgonly)
+	s.mtr.pop()
+
+	return nil
+}
+
+func (s *solver) selectAtomForNongo(a atomWithPackages, pkgonly bool) error {
+	fmt.Println("hello selectAtom Function&&&&&&&&&&&&", a)
+	s.mtr.push("select-atom")
+	s.unsel.remove(bimodalIdentifier{
+		id: a.a.id,
+		pl: a.pl,
+	})
+
+	pl, deps, err := s.getImportsAndConstraintsOf(a)
+	fmt.Println("hello get all project constraints--------", pl, deps, err)
+	if err != nil {
+		if contextCanceledOrSMReleased(err) {
+			return err
+		}
+		// This shouldn't be possible; other checks should have ensured all
+		// packages and deps are present for any argument passed to this method.
+
+		// panic(fmt.Sprintf("canary - shouldn't be possible %s", err))
+	}
+	// Assign the new internal package list into the atom, then push it onto the
+	// selection stack
+	a.pl = pl
+	s.sel.pushSelection(a, pkgonly)
+
+	// If this atom has a lock, pull it out so that we can potentially inject
+	// preferred versions into any bmis we enqueue
+	//
+	// TODO(sdboyer) making this call here could be the first thing to trigger
+	// network activity...maybe? if so, can we mitigate by deferring the work to
+	// queue consumption time?
+	_, l, _ := s.b.GetManifestAndLock(a.a.id, a.a.v, s.rd.an)
+	fmt.Println("hello lock files----------", l)
 	var lmap map[ProjectIdentifier]Version
 	if l != nil {
 		lmap = make(map[ProjectIdentifier]Version)
