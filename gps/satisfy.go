@@ -35,9 +35,9 @@ func (s *solver) check(a atomWithPackages, pkgonly bool) error {
 		}
 	}
 
-	if err = s.checkRequiredPackagesExist(a); err != nil {
+	/*if err = s.checkRequiredPackagesExist(a); err != nil {
 		return err
-	}
+	}*/
 
 	var deps []completeDep
 	_, deps, err = s.getImportsAndConstraintsOf(a)

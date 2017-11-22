@@ -1074,7 +1074,7 @@ func (s *solver) createVersionQueue(bmi bimodalIdentifier) (*versionQueue, error
 
 	// Having assembled the queue, search it for a valid version.
 	s.traceCheckQueue(q, bmi, false, 1)
-	return q, nil
+	return q, s.findValidVersion(q, bmi.pl)
 }
 
 // findValidVersion walks through a versionQueue until it finds a version that
