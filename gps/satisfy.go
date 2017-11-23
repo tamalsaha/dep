@@ -35,9 +35,9 @@ func (s *solver) check(a atomWithPackages, pkgonly bool) error {
 		}
 	}
 
-	if err = s.checkRequiredPackagesExist(a); err != nil {
+	/*if err = s.checkRequiredPackagesExist(a); err != nil {
 		return err
-	}
+	}*/
 
 	var deps []completeDep
 	_, deps, err = s.getImportsAndConstraintsOf(a)
@@ -66,9 +66,9 @@ func (s *solver) check(a atomWithPackages, pkgonly bool) error {
 		if err = s.checkRevisionExists(a, dep); err != nil {
 			return err
 		}
-		if err = s.checkPackageImportsFromDepExist(a, dep); err != nil {
+		/*if err = s.checkPackageImportsFromDepExist(a, dep); err != nil {
 			return err
-		}
+		}*/
 
 		// TODO(sdboyer) add check that fails if adding this atom would create a loop
 	}
